@@ -72,7 +72,7 @@ func main() {
 		go fuzzUrl(url, words, results, progress, tracker)
 	}
 
-	// Loading wordlist in channel
+	// Results
 	go func() {
 		for range wordlist {
 			url := <-results
@@ -84,10 +84,12 @@ func main() {
 		tracker <- e
 	}()
 
+	// Loading wordlist in channel
 	for _, word := range wordlist {
 		words <- word
 	}
 
+	// Close channels
 	close(words)
 
 	for i := 0; i < *flWorkerCount; i++ {
