@@ -9,13 +9,16 @@ import (
 	"strings"
 )
 
+type empty struct{}
+
 func main() {
 
 	// Arguments
 	var (
-		flURL      = flag.String("url", "", "URL to fuzz")
-		flWordlist = flag.String("wordlist", "", "Wordlist to use")
-		flOutput   = flag.String("output", "", "Output file")
+		flURL         = flag.String("url", "", "URL to fuzz")
+		flWorkerCount = flag.Int("t", 100, "Workers to use")
+		flWordlist    = flag.String("wordlist", "", "Wordlist to use")
+		flOutput      = flag.String("output", "", "Output file")
 	)
 
 	flag.Parse()
@@ -45,42 +48,67 @@ func main() {
 	wordlist := readWordlist(wordlistPath)
 
 	// Create channels
-	words := make(chan string, 100)
+	words := make(chan string, *flWorkerCount)
 	results := make(chan string)
+	progress := make(chan int)
+	tracker := make(chan empty)
+
+	processedWords := 0
+
+	// Results
 	var urls []string
 
+	// Print progress
+	go func() {
+		defer close(progress)
+		for range progress {
+			processedWords++
+			updateScreen(processedWords, len(wordlist), urls)
+		}
+	}()
+
 	// Fuzzing
-	for i := 0; i < cap(words); i++ {
-		go fuzzUrl(url, words, results)
+	for i := 0; i < *flWorkerCount; i++ {
+		go fuzzUrl(url, words, results, progress, tracker)
 	}
 
 	// Loading wordlist in channel
 	go func() {
-		for _, word := range wordlist {
-			words <- word
+		for range wordlist {
+			url := <-results
+			if url != "" {
+				urls = append(urls, url)
+			}
 		}
+		var e empty
+		tracker <- e
 	}()
 
-	// Collecting results
 	for _, word := range wordlist {
-		url := <-results
-		if word != "" {
-			urls = append(urls, url)
-		}
+		words <- word
 	}
 
 	close(words)
+
+	for i := 0; i < *flWorkerCount; i++ {
+		<-tracker
+	}
+
 	close(results)
+	<-tracker
+
+	fmt.Println("Fuzzing finished!")
 
 	// Write results
 	output := strings.TrimSpace(*flOutput)
 
 	if output != "" {
+		fmt.Println("Writing results to: ", output)
 		writeResults(urls, output)
 	}
 }
 
-func fuzzUrl(url string, words, results chan string) {
+func fuzzUrl(url string, words, results chan string, progress chan int, tracker chan empty) {
 	for word := range words {
 		if word == "" {
 			continue
@@ -93,7 +121,10 @@ func fuzzUrl(url string, words, results chan string) {
 		} else {
 			results <- ""
 		}
+		progress <- 1
 	}
+	var e empty
+	tracker <- e
 }
 
 func checkUrl(url string) bool {
@@ -139,4 +170,27 @@ func writeResults(urls []string, filename string) {
 	for _, url := range urls {
 		file.WriteString(url + "\n")
 	}
+}
+
+// Screen
+
+func clearScreen() {
+	fmt.Print("\033[H\033[2J")
+}
+
+func printProgress(progress int, total int) {
+	percentage := (float64(progress) / float64(total)) * 100
+	fmt.Printf("Progress: %d/%d (%.2f%%)\n", progress, total, percentage)
+}
+
+func printResults(urls []string) {
+	for _, url := range urls {
+		fmt.Println(url)
+	}
+}
+
+func updateScreen(progress int, total int, urls []string) {
+	clearScreen()
+	printProgress(progress, total)
+	printResults(urls)
 }
