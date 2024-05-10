@@ -15,10 +15,12 @@ func main() {
 	var (
 		flURL      = flag.String("url", "", "URL to fuzz")
 		flWordlist = flag.String("wordlist", "", "Wordlist to use")
+		flOutput   = flag.String("output", "", "Output file")
 	)
 
 	flag.Parse()
 
+	// Mandatory arguments
 	if *flURL == "" {
 		fmt.Println("URL is required: --url")
 		return
@@ -29,6 +31,7 @@ func main() {
 		return
 	}
 
+	// URL parsing
 	url := strings.TrimSpace(*flURL)
 
 	if !strings.HasSuffix(url, "/") {
@@ -37,7 +40,7 @@ func main() {
 
 	fmt.Println("Fuzzing: ", url)
 
-
+	// Wordlist parsing
 	wordlistPath := strings.TrimSpace(*flWordlist)
 	wordlist := readWordlist(wordlistPath)
 
@@ -46,16 +49,19 @@ func main() {
 	results := make(chan string)
 	var urls []string
 
+	// Fuzzing
 	for i := 0; i < cap(words); i++ {
 		go fuzzUrl(url, words, results)
 	}
 
+	// Loading wordlist in channel
 	go func() {
 		for _, word := range wordlist {
 			words <- word
 		}
 	}()
 
+	// Collecting results
 	for _, word := range wordlist {
 		url := <-results
 		if word != "" {
@@ -65,16 +71,26 @@ func main() {
 
 	close(words)
 	close(results)
+
+	// Write results
+	output := strings.TrimSpace(*flOutput)
+
+	if output != "" {
+		writeResults(urls, output)
+	}
 }
 
 func fuzzUrl(url string, words, results chan string) {
 	for word := range words {
+		if word == "" {
+			continue
+		}
 		newUrl := url + word
 		exists := checkUrl(newUrl)
 		if exists {
 			fmt.Println("URL exists: ", newUrl)
 			results <- newUrl
-		} else{
+		} else {
 			results <- ""
 		}
 	}
@@ -111,4 +127,16 @@ func readWordlist(wordlistPath string) []string {
 	}
 
 	return wordlist
+}
+
+func writeResults(urls []string, filename string) {
+	file, err := os.Create(filename)
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer file.Close()
+
+	for _, url := range urls {
+		file.WriteString(url + "\n")
+	}
 }
