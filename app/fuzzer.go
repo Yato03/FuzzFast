@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"log"
 )
 
 func main() {
@@ -28,9 +29,14 @@ func main() {
 		return
 	}
 
-	fmt.Println("Fuzzing: ", *flURL)
-
 	url := strings.TrimSpace(*flURL)
+
+	if !strings.HasSuffix(url, "/") {
+		url = url + "/"
+	}
+
+	fmt.Println("Fuzzing: ", url)
+
 
 	wordlistPath := strings.TrimSpace(*flWordlist)
 	wordlist := readWordlist(wordlistPath)
@@ -40,22 +46,21 @@ func main() {
 
 func fuzzUrl(url string, wordlist []string) {
 	for _, word := range wordlist {
-		newUrl := fmt.Sprintf("%s/%s", url, word)
-		exists := checkUrl(newUrl)
-		if exists {
-			fmt.Println("URL exists: ", newUrl)
-		}
+		newUrl := url + word
+		go checkUrl(newUrl)
 	}
 }
 
-func checkUrl(url string) bool {
+func checkUrl(url string) {
 	res, err := http.Get(url)
 	if err != nil {
-		return false
+		log.Fatal(err)
 	}
 	defer res.Body.Close()
 
-	return res.StatusCode == http.StatusOK
+	if res.StatusCode == http.StatusOK {
+		fmt.Println("URL exists: ", url)
+	}
 }
 
 func readWordlist(wordlistPath string) []string {
