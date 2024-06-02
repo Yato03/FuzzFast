@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+  "github.com/schollz/progressbar/v3" 
 )
 
 type empty struct{}
@@ -53,6 +54,8 @@ func main() {
 	progress := make(chan int)
 	tracker := make(chan empty)
 
+  // Progress
+  bar := progressbar.Default(int64(len(wordlist)))
 	processedWords := 0
 
 	// Results
@@ -63,7 +66,7 @@ func main() {
 		defer close(progress)
 		for range progress {
 			processedWords++
-			updateScreen(processedWords, len(wordlist), urls)
+      bar.Add(1)
 		}
 	}()
 
@@ -78,6 +81,7 @@ func main() {
 			url := <-results
 			if url != "" {
 				urls = append(urls, url)
+        updateScreen(urls)
 			}
 		}
 		var e empty
@@ -180,19 +184,15 @@ func clearScreen() {
 	fmt.Print("\033[H\033[2J")
 }
 
-func printProgress(progress int, total int) {
-	percentage := (float64(progress) / float64(total)) * 100
-	fmt.Printf("Progress: %d/%d (%.2f%%)\n", progress, total, percentage)
-}
-
 func printResults(urls []string) {
+  fmt.Println("Urls Discovered:")
 	for _, url := range urls {
 		fmt.Println(url)
 	}
+  fmt.Println("")
 }
 
-func updateScreen(progress int, total int, urls []string) {
+func updateScreen(urls []string) {
 	clearScreen()
-	printProgress(progress, total)
 	printResults(urls)
 }
